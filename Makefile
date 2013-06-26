@@ -34,13 +34,17 @@ LIB_XML2   = $(shell xml2-config --libs)
 LDFLAGS = $(LIB_EXPAT) $(LIB_PBF)
 
 PROGRAMS = \
-    count_addresses
+    count_addresses \
+    count
 
 .PHONY: all clean
 
 all: $(PROGRAMS)
 
 count_addresses: count_addresses.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
+count: count.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 clean:
