@@ -36,7 +36,8 @@ LDFLAGS = $(LIB_EXPAT) $(LIB_PBF)
 PROGRAMS = \
     count_addresses \
     count \
-    osmgrep
+    osmgrep \
+    add_timestamp
 
 .PHONY: all clean
 
@@ -49,6 +50,9 @@ count: count.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 osmgrep: osmgrep.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
+add_timestamp: add_timestamp.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 clean:
