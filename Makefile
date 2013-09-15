@@ -37,7 +37,9 @@ PROGRAMS = \
     count_addresses \
     count \
     osmgrep \
-    add_timestamp
+    add_timestamp \
+    osmstats \
+    lastnode
 
 .PHONY: all clean
 
@@ -53,6 +55,12 @@ osmgrep: osmgrep.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 add_timestamp: add_timestamp.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
+osmstats: osmstats.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2) $(LIB_GEOS)
+
+lastnode: lastnode.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 clean:
