@@ -42,7 +42,8 @@ class CountHandler: public Osmium::Handler::Base
 
     std::vector<SearchTag *> searchTags;
     std::vector<std::string> usernames;
-    std::vector<int> userid;
+    std::vector<uint32_t> userid;
+    std::vector<uint64_t> objectid;
 
     Osmium::Output::Handler *outHandler;
 
@@ -106,6 +107,14 @@ public:
         return true;
     }
 
+    bool addObjectID(char *i)
+    {
+        int a=atoi(i);
+        if(a==0) return false;
+        objectid.push_back(a);
+        return true;
+    }
+
     void addUserName(char *u)
     {
         usernames.push_back(u);
@@ -121,7 +130,8 @@ public:
         if (!process_nodes) return;
         if (!tagmatch(node->tags())) return;
         if (!usermatch(node->user())) return;
-        if (!idmatch(node->uid())) return;
+        if (!uidmatch(node->uid())) return;
+        if (!oidmatch(node->id())) return;
         if (outHandler) outHandler->node(node);
         nodes++;
     }
@@ -139,7 +149,8 @@ public:
         if (!process_ways) return;
         if (!tagmatch(way->tags())) return;
         if (!usermatch(way->user())) return;
-        if (!idmatch(way->uid())) return;
+        if (!uidmatch(way->uid())) return;
+        if (!oidmatch(way->id())) return;
         if (outHandler) outHandler->way(way);
         ways++;
     }
@@ -157,7 +168,8 @@ public:
         if (!process_rels) return;
         if (!tagmatch(relation->tags())) return;
         if (!usermatch(relation->user())) return;
-        if (!idmatch(relation->uid())) return;
+        if (!uidmatch(relation->uid())) return;
+        if (!oidmatch(relation->id())) return;
         if (outHandler) outHandler->relation(relation);
         rels++;
     }
@@ -178,12 +190,25 @@ public:
 
 private:
 
-    bool idmatch(int id)
+    bool uidmatch(uint32_t id)
     {
         if (userid.empty()) return true;
         for (unsigned int i=0; i < userid.size(); i++)
         {
             if (userid[i]==id)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool oidmatch(uint64_t id)
+    {
+        if (objectid.empty()) return true;
+        for (unsigned int i=0; i < objectid.size(); i++)
+        {
+            if (objectid[i]==id)
             {
                 return true;
             }
@@ -234,7 +259,8 @@ void print_help(const char *progname)
             << "\nOptions:\n" 
             << "  --help        this help message\n" 
             << "  --type <t>    match objects of type t (node, way, relation)\n"
-            << "  --id <i>      match user ID i\n"
+            << "  --oid <i>     match object ID i\n"
+            << "  --uid <i>     match user ID i\n"
             << "  --user <u>    match user name u\n"
             << "  --expr <e>    match objects with given tag (e can be type=value or type=*)\n"
             << "  --output <o>  write output to file o (without, just displays counts)\n"
@@ -251,7 +277,8 @@ int main(int argc, char *argv[])
     {
         {"help", no_argument, 0, 'h'},
         {"type", required_argument, 0, 't'},
-        {"id", required_argument, 0, 'i'},
+        {"oid", required_argument, 0, 'd'},
+        {"uid", required_argument, 0, 'i'},
         {"user",  required_argument, 0, 'u'},
         {"expr", required_argument, 0, 'e'},
         {"output", required_argument, 0, 'o'},
@@ -265,7 +292,7 @@ int main(int argc, char *argv[])
 
     while (true)
     {
-        int c = getopt_long(argc, argv, "ht:i:u:e:o:", long_options, 0);
+        int c = getopt_long(argc, argv, "ht:d:i:u:e:o:", long_options, 0);
         if (c == -1) 
         {
             break;
@@ -299,7 +326,15 @@ int main(int argc, char *argv[])
         case 'i':
             if (!handler.addUserID(optarg))
             {
-                std::cerr << "-i flag requires a number for ID like -i23232\n"  << std::endl;
+                std::cerr << "--oid flag requires a number for ID like --oid 23232\n"  << std::endl;
+                print_help(argv[0]);
+                exit(1);
+            }
+            break;
+        case 'd':
+            if (!handler.addObjectID(optarg))
+            {
+                std::cerr << "--uid flag requires a number for ID like --uid23232\n"  << std::endl;
                 print_help(argv[0]);
                 exit(1);
             }
