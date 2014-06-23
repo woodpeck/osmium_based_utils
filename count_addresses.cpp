@@ -32,10 +32,14 @@ class AddressCountHandler : public Osmium::Handler::Base
 
 private:
     std::map<osm_object_id_t, uint16_t> housenumberMap;
-    size_t numbers_overall;
-    size_t numbers_withstreet;  
-    size_t numbers_withcity;
-    size_t numbers_withcountry;
+    size_t numbers_nodes_overall;
+    size_t numbers_nodes_withstreet;  
+    size_t numbers_nodes_withcity;
+    size_t numbers_nodes_withcountry;
+    size_t numbers_ways_overall;
+    size_t numbers_ways_withstreet;  
+    size_t numbers_ways_withcity;
+    size_t numbers_ways_withcountry;
     size_t interpolation_count;
     size_t interpolation_error;
     size_t numbers_through_interpolation;
@@ -46,10 +50,14 @@ public:
 
     AddressCountHandler(bool dbg) 
     {
-         numbers_overall = 0;
-         numbers_withstreet = 0;  
-         numbers_withcity = 0;
-         numbers_withcountry = 0;
+         numbers_nodes_overall = 0;
+         numbers_nodes_withstreet = 0;  
+         numbers_nodes_withcity = 0;
+         numbers_nodes_withcountry = 0;
+         numbers_ways_overall = 0;
+         numbers_ways_withstreet = 0;  
+         numbers_ways_withcity = 0;
+         numbers_ways_withcountry = 0;
          interpolation_count = 0;
          interpolation_error = 0;
          numbers_through_interpolation = 0;
@@ -65,95 +73,109 @@ public:
         const char *hno = node->tags().get_value_by_key("addr:housenumber");
         if (hno)
         {
-            if(node->id()==643600355) std::cerr << "643600355" << std::endl;
             housenumberMap[node->id()] = atoi(hno);
-            numbers_overall ++;
-            if (node->tags().get_value_by_key("addr:street")) numbers_withstreet ++;
-            if (node->tags().get_value_by_key("addr:city")) numbers_withcity ++;
-            if (node->tags().get_value_by_key("addr:country")) numbers_withcountry ++;
+            numbers_nodes_overall ++;
+            if (node->tags().get_value_by_key("addr:street")) numbers_nodes_withstreet ++;
+            if (node->tags().get_value_by_key("addr:city")) numbers_nodes_withcity ++;
+            if (node->tags().get_value_by_key("addr:country")) numbers_nodes_withcountry ++;
         }
     }
 
     void way(const shared_ptr<Osmium::OSM::Way>& way) 
     {
         const char* inter = way->tags().get_value_by_key("addr:interpolation");
-        if (!inter) return;
-        interpolation_count ++;
-        osm_object_id_t fromnode = way->get_first_node_id();
-        osm_object_id_t tonode = way->get_last_node_id();
-        uint16_t fromhouse = housenumberMap[fromnode];
-        uint16_t tohouse = housenumberMap[tonode];
-
-        // back out if we don't have both house numbers
-        if (!(fromhouse && tohouse)) 
+        if (inter)
         {
-            interpolation_error++;
-            if (debug)
+            interpolation_count ++;
+            osm_object_id_t fromnode = way->get_first_node_id();
+            osm_object_id_t tonode = way->get_last_node_id();
+            uint16_t fromhouse = housenumberMap[fromnode];
+            uint16_t tohouse = housenumberMap[tonode];
+
+            // back out if we don't have both house numbers
+            if (!(fromhouse && tohouse)) 
             {
-                if (!fromhouse) std::cerr << "interpolation way " << way->id() << " references node " << fromnode << " which has no addr:housenumber" << std::endl;
-                if (!tohouse) std::cerr << "interpolation way " << way->id() << " references node " << tonode << " which has no addr:housenumber" << std::endl;
+                interpolation_error++;
+                if (debug)
+                {
+                    if (!fromhouse) std::cerr << "interpolation way " << way->id() << " references node " << fromnode << " which has no addr:housenumber" << std::endl;
+                    if (!tohouse) std::cerr << "interpolation way " << way->id() << " references node " << tonode << " which has no addr:housenumber" << std::endl;
+                }
+                return;
             }
-            return;
-        }
 
-        // swap if range is backwards
-        if (tohouse < fromhouse) 
-        {
-            fromhouse = tohouse;
-            tohouse = housenumberMap[fromnode];
-        }
+            // swap if range is backwards
+            if (tohouse < fromhouse) 
+            {
+                fromhouse = tohouse;
+                tohouse = housenumberMap[fromnode];
+            }
 
-        if (!strcmp(inter, "even"))
-        {
-            if ((fromhouse %2 == 1) || (tohouse %2 == 1))
+            if (!strcmp(inter, "even"))
+            {
+                if ((fromhouse %2 == 1) || (tohouse %2 == 1))
+                {
+                    if (debug)
+                    {
+                        if (fromhouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=even) references node " << fromnode << " which has an odd house number of " << fromhouse << std::endl;
+                        if (tohouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=even) references node " << tonode << " which has an odd house number of " << tohouse << std::endl;
+                    }
+                    interpolation_error++;
+                    return;
+                }
+                numbers_through_interpolation += (tohouse - fromhouse) / 2 - 1;
+            }
+            else if (!strcmp(inter, "odd"))
+            {
+                if ((fromhouse %2 == 0) || (tohouse %2 == 0))
+                {
+                    if (debug)
+                    {
+                        if (fromhouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=odd) references node " << fromnode << " which has an even house number of " << fromhouse << std::endl;
+                        if (tohouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=odd) references node " << tonode << " which has an even house number of " << tohouse << std::endl;
+                    }
+                    interpolation_error++;
+                    return;
+                }
+                numbers_through_interpolation += (tohouse - fromhouse) / 2 - 1;
+            }
+            else if (!strcmp(inter, "both") || !strcmp(inter, "all"))
+            {
+                numbers_through_interpolation += (tohouse - fromhouse) - 1;
+            }
+            else
             {
                 if (debug)
                 {
-                    if (fromhouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=even) references node " << fromnode << " which has an odd house number of " << fromhouse << std::endl;
-                    if (tohouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=even) references node " << tonode << " which has an odd house number of " << tohouse << std::endl;
+                    std::cerr << "interpolation way " << way->id() << " has invalid interpolation mode '" << inter << "'" << std::endl;
                 }
                 interpolation_error++;
-                return;
             }
-            numbers_through_interpolation += (tohouse - fromhouse) / 2 - 1;
-        }
-        else if (!strcmp(inter, "odd"))
-        {
-            if ((fromhouse %2 == 0) || (tohouse %2 == 0))
-            {
-                if (debug)
-                {
-                    if (fromhouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=odd) references node " << fromnode << " which has an even house number of " << fromhouse << std::endl;
-                    if (tohouse%2==1) std::cerr << "interpolation way " << way->id() << " (addr:interpolation=odd) references node " << tonode << " which has an even house number of " << tohouse << std::endl;
-                }
-                interpolation_error++;
-                return;
-            }
-            numbers_through_interpolation += (tohouse - fromhouse) / 2 - 1;
-        }
-        else if (!strcmp(inter, "both") || !strcmp(inter, "all"))
-        {
-            numbers_through_interpolation += (tohouse - fromhouse) - 1;
+            // slight error here - if interpolation way contains intermediate nodes with addresses then these are counted twice.
         }
         else
         {
-            if (debug)
+            const char *hno = way->tags().get_value_by_key("addr:housenumber");
+            if (hno)
             {
-                std::cerr << "interpolation way " << way->id() << " has invalid interpolation mode '" << inter << "'" << std::endl;
+                numbers_ways_overall ++;
+                if (way->tags().get_value_by_key("addr:street")) numbers_ways_withstreet ++;
+                if (way->tags().get_value_by_key("addr:city")) numbers_ways_withcity ++;
+                if (way->tags().get_value_by_key("addr:country")) numbers_ways_withcountry ++;
             }
-            interpolation_error++;
         }
-        // slight error here - if interpolation way contains intermediate nodes with addresses then these are counted twice.
     }
 
     void after_ways() 
     {
-        std::cout << "Nodes with house numbers: " <<  numbers_overall << std::endl;
-        std::cout << "  thereof, with street:   " <<  numbers_withstreet << std::endl;
-        std::cout << "  thereof, with city:     " <<  numbers_withcity << std::endl;
-        std::cout << "  thereof, with country:  " <<  numbers_withcountry << std::endl;
-        std::cout << "Number of interpolations: " <<  interpolation_count << " (" << interpolation_error << " ignored due to errors)" << std::endl;
-        std::cout << "House numbers added through interpolation: " <<  numbers_through_interpolation << std::endl;
+        printf("                      nodes      ways      total\n");
+        printf("with house number   %8ld   %8ld   %8ld\n", numbers_nodes_overall, numbers_ways_overall, numbers_nodes_overall + numbers_ways_overall);
+        printf("... and street      %8ld   %8ld   %8ld\n", numbers_nodes_withstreet, numbers_ways_withstreet, numbers_nodes_withstreet + numbers_ways_withstreet);
+        printf("... and city        %8ld   %8ld   %8ld\n", numbers_nodes_withcity, numbers_ways_withcity, numbers_nodes_withcity + numbers_ways_withcity);
+        printf("... and country     %8ld   %8ld   %8ld\n", numbers_nodes_withcountry, numbers_ways_withcountry, numbers_nodes_withcountry + numbers_ways_withcountry);
+        printf("\ntotal interpolations: %ld (%ld ignored)\n", interpolation_count, interpolation_error);
+        printf("\nhouse numbers added through interpolation: %ld\n", numbers_through_interpolation);
+        printf("\ngrand total (interpolation, ways, nodes): %ld\n", numbers_through_interpolation + numbers_nodes_overall + numbers_ways_overall);
 
         throw Osmium::Handler::StopReading();
     }
