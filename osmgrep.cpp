@@ -36,14 +36,14 @@ class CountHandler: public Osmium::Handler::Base
     uint64_t nodes;
     uint64_t ways;
     uint64_t rels;
-    uint64_t suche;
-    uint64_t suche2;
-    uint64_t suche3;
 
     std::vector<SearchTag *> searchTags;
     std::vector<std::string> usernames;
     std::vector<uint32_t> userid;
     std::vector<uint64_t> objectid;
+
+    uint64_t version;
+    short int version_sign;
 
     Osmium::Output::Handler *outHandler;
 
@@ -63,6 +63,8 @@ public:
         process_nodes = false;
         process_ways = false;
         process_rels = false;
+        version = 0;
+        version_sign = 0;
     }
 
     void setTypes(bool nodes, bool ways, bool rels)
@@ -115,6 +117,17 @@ public:
         return true;
     }
 
+    bool setVersion(char *v)
+    {
+        if (*v == '+' || *v == '-')
+        {
+            version_sign = (*v == '-') ? -1 : 1;
+            v++;
+        }
+        version = atoi(v);
+        return (version > 0);
+    }
+
     void addUserName(char *u)
     {
         usernames.push_back(u);
@@ -132,6 +145,7 @@ public:
         if (!usermatch(node->user())) return;
         if (!uidmatch(node->uid())) return;
         if (!oidmatch(node->id())) return;
+        if (!versionmatch(node->version())) return;
         if (outHandler) outHandler->node(node);
         nodes++;
     }
@@ -151,6 +165,7 @@ public:
         if (!usermatch(way->user())) return;
         if (!uidmatch(way->uid())) return;
         if (!oidmatch(way->id())) return;
+        if (!versionmatch(way->version())) return;
         if (outHandler) outHandler->way(way);
         ways++;
     }
@@ -170,6 +185,7 @@ public:
         if (!usermatch(relation->user())) return;
         if (!uidmatch(relation->uid())) return;
         if (!oidmatch(relation->id())) return;
+        if (!versionmatch(relation->version())) return;
         if (outHandler) outHandler->relation(relation);
         rels++;
     }
@@ -250,6 +266,14 @@ private:
         return false;
     }
 
+    bool versionmatch(uint64_t v)
+    {
+        if (version == 0) return true;
+        if (version_sign == -1 && v < version) return true;
+        if (version_sign == 1 && v > version) return true;
+        return (v==version);
+    }
+
 };
 
 void print_help(const char *progname)
@@ -261,6 +285,7 @@ void print_help(const char *progname)
             << "  --type <t>    match objects of type t (node, way, relation)\n"
             << "  --oid <i>     match object ID i\n"
             << "  --uid <i>     match user ID i\n"
+            << "  --version <i> match verison i (+i = larger than i, -i = smaller than i)\n"
             << "  --user <u>    match user name u\n"
             << "  --expr <e>    match objects with given tag (e can be type=value or type=*)\n"
             << "  --output <o>  write output to file o (without, just displays counts)\n"
@@ -278,6 +303,7 @@ int main(int argc, char *argv[])
         {"help", no_argument, 0, 'h'},
         {"type", required_argument, 0, 't'},
         {"oid", required_argument, 0, 'd'},
+        {"version", required_argument, 0, 'v'},
         {"uid", required_argument, 0, 'i'},
         {"user",  required_argument, 0, 'u'},
         {"expr", required_argument, 0, 'e'},
@@ -292,7 +318,7 @@ int main(int argc, char *argv[])
 
     while (true)
     {
-        int c = getopt_long(argc, argv, "ht:d:i:u:e:o:", long_options, 0);
+        int c = getopt_long(argc, argv, "ht:d:i:u:e:o:v:", long_options, 0);
         if (c == -1) 
         {
             break;
@@ -326,7 +352,15 @@ int main(int argc, char *argv[])
         case 'i':
             if (!handler.addUserID(optarg))
             {
-                std::cerr << "--oid flag requires a number for ID like --oid 23232\n"  << std::endl;
+                std::cerr << "--uid flag requires a number for ID like --uid23232\n"  << std::endl;
+                print_help(argv[0]);
+                exit(1);
+            }
+            break;
+        case 'v':
+            if (!handler.setVersion(optarg))
+            {
+                std::cerr << "--version flag requires a number: --version [+-)]5\n"  << std::endl;
                 print_help(argv[0]);
                 exit(1);
             }
@@ -334,7 +368,7 @@ int main(int argc, char *argv[])
         case 'd':
             if (!handler.addObjectID(optarg))
             {
-                std::cerr << "--uid flag requires a number for ID like --uid23232\n"  << std::endl;
+                std::cerr << "--oid flag requires a number for ID like --oid 23232\n"  << std::endl;
                 print_help(argv[0]);
                 exit(1);
             }
