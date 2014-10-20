@@ -46,6 +46,19 @@ private:
     int housenumber_count;
     int place_count;
 
+    int poi_power_count;
+    int poi_traffic_count;
+    int poi_other_count;
+    int poi_public_count;
+    int poi_hospitality_count;
+    int poi_shop_count;
+    int poi_religion_count;
+
+    int landuse_green_count;
+    int landuse_blue_count;
+    int landuse_zone_count;
+    int landuse_agri_count;
+
 
 public:
 
@@ -68,6 +81,20 @@ public:
         poi_count = 0;
         housenumber_count = 0;
         place_count = 0;
+
+        poi_power_count = 0;
+        poi_traffic_count = 0;
+        poi_other_count = 0;
+        poi_public_count = 0;
+        poi_hospitality_count = 0;
+        poi_shop_count = 0;
+        poi_religion_count = 0;
+        poi_traffic_count = 0;
+
+        landuse_green_count = 0;
+        landuse_blue_count = 0;
+        landuse_zone_count = 0;
+        landuse_agri_count = 0;
     }
 
     ~StatisticsHandler() {
@@ -120,6 +147,116 @@ public:
         return 0.0;
     }
 
+    void count_misc(Osmium::OSM::TagList tags)
+    {
+        const char *t = tags.get_value_by_key("landuse");
+        if (t)
+        {
+            if (!strcmp(t, "forest") || !strcmp(t, "grass") || !strcmp(t, "meadow"))
+            {
+                landuse_green_count++;
+            }
+            else if (!strcmp(t, "residential") || !strcmp(t, "industrial") || !strcmp(t, "commercial") || !strcmp(t, "military"))
+            {
+                landuse_zone_count++;
+            }
+            else if (!strcmp(t, "farmland") || !strcmp(t, "farm") || !strcmp(t, "farmyard"))
+            {
+                landuse_agri_count++;
+            }
+        }
+        t = tags.get_value_by_key("amenity");
+        if (t)
+        {
+            if (!strcmp(t, "restaurant") || !strcmp(t, "cafe") || !strcmp(t, "fast_food") || !strcmp(t, "pub") || !strcmp(t, "bar"))
+            {
+                poi_hospitality_count++;
+            }
+            else if (!strcmp(t, "fuel") || !strcmp(t, "parking"))
+            {
+                poi_traffic_count++;
+            }
+            else if (!strcmp(t, "place_of_worship"))
+            {
+                poi_religion_count++;
+            }
+            else if (!strcmp(t, "school") || !strcmp(t, "public_building") || !strcmp(t, "kindergarten") || !strcmp(t, "hospital") || !strcmp(t, "post_office"))
+            {
+                poi_public_count++;
+            }
+            else if (!strcmp(t, "atm") || !strcmp(t, "bank"))
+            {
+                poi_shop_count++;
+            }
+            else
+            {
+                poi_other_count++;
+            }
+        }
+        if (tags.get_value_by_key("shop"))  poi_shop_count++;
+        t = tags.get_value_by_key("tourism");
+        if (t)
+        {
+            if (!strcmp(t, "hotel") || !strcmp(t, "motel") || !strcmp(t, "camp_site") || !strcmp(t, "hostel"))
+            {
+                poi_hospitality_count++;
+            }
+            else if (!strcmp(t, "museum"))
+            {
+                poi_public_count++;
+            }
+            else
+            {
+                poi_other_count++;
+            }
+        }
+        t = tags.get_value_by_key("highway");
+        if (t)
+        {
+            if (!strcmp(t, "bus_stop"))
+            {
+                poi_traffic_count++;
+            }
+        }
+        t = tags.get_value_by_key("aeroway");
+        if (t)
+        {
+            if (!strcmp(t, "aerodrome"))
+            {
+                poi_traffic_count++;
+            }
+        }
+        t = tags.get_value_by_key("railway");
+        if (t)
+        {
+            if (!strcmp(t, "station") || !strcmp(t, "halt"))
+            {
+                poi_traffic_count++;
+            }
+        }
+        t = tags.get_value_by_key("power");
+        if (t)
+        {
+            if (!strcmp(t, "station") || !strcmp(t, "generator") || !strcmp(t, "transformer"))
+            {
+                poi_power_count++;
+            }
+        }
+        t = tags.get_value_by_key("natural");
+        if (t)
+        {
+            if (!strcmp(t, "wood"))
+            {
+                landuse_green_count++;
+            }
+            else if (!strcmp(t, "water"))
+            {
+                landuse_blue_count++;
+            }
+        }
+    }
+
+
     void area(const shared_ptr<Osmium::OSM::Area const>& area) 
     {
         if (area->tags().get_value_by_key("building"))
@@ -130,6 +267,7 @@ public:
         {
             housenumber_count++;
         }
+        count_misc(area->tags());
     }
 
     void way(const shared_ptr<Osmium::OSM::Way const>& way) 
@@ -188,15 +326,12 @@ public:
             }
             return;
         }
+        count_misc(way->tags());
     }
 
     void node(const shared_ptr<Osmium::OSM::Node const>& node) 
     {
-        if (node->tags().get_value_by_key("amenity") || node->tags().get_value_by_key("tourism") || node->tags().get_value_by_key("shop"))
-        {
-            poi_count++;
-        }
-        else if (node->tags().get_value_by_key("place"))
+        if (node->tags().get_value_by_key("place"))
         {
             if (node->tags().get_value_by_key("name")) place_count++;
         }
@@ -204,10 +339,68 @@ public:
         {
             housenumber_count++;
         }
+        else 
+        {
+            count_misc(node->tags());
+        }
     }
 
     void final()
     {
+        bool csv = true;
+        if (csv)
+        {
+            std::cout <<
+                "motorways and trunk roads km,"
+                "primary and secondary roads km,"
+                "other connecting roads km,"
+                "residential roads km,"
+                "tracks/paths km,"
+                "rivers km,"
+                "railways km,"
+                "power lines km,"
+                "buildings,"
+                "house numbers,"
+                "named places,"
+                "forest/meadow landcover count,"
+                "water area landcover count,"
+                "residential/industrial zone count,"
+                "agricultural landuse count,"
+                "POIs power,"
+                "POIs transport,"
+                "POIs public,"
+                "POIs hospitality,"
+                "POIs shop/bank,"
+                "POIs religion,"
+                "POIs other" << std::endl;
+
+            std::cout <<
+                (int) (motorway_trunk_length / 1000) << "," <<
+                (int) (primary_secondary_length / 1000) << "," <<
+                (int) (other_road_length / 1000) << "," <<
+                (int) (residential_road_length / 1000) << "," <<
+                (int) (path_length / 1000) << "," <<
+                (int) (river_length / 1000) << "," <<
+                (int) (railway_length / 1000) << "," <<
+                (int) (powerline_length / 1000) << "," <<
+                building_count << "," <<
+                housenumber_count << "," <<
+                place_count << "," <<
+                landuse_green_count << "," <<
+                landuse_blue_count << "," <<
+                landuse_zone_count  << "," <<
+                landuse_agri_count  << "," <<
+                poi_power_count << "," <<
+                poi_traffic_count << "," <<
+                poi_public_count << "," <<
+                poi_hospitality_count << "," <<
+                poi_shop_count << "," <<
+                poi_religion_count << "," <<
+                poi_other_count << 
+                std::endl;
+        }
+        else
+        {
         printf("motorways and trunk roads ....... %5.0f km\n", motorway_trunk_length / 1000);
         printf("primary and secondary roads ..... %5.0f km\n", primary_secondary_length / 1000);
         printf("other connecting roads .......... %5.0f km\n", other_road_length / 1000);
@@ -222,6 +415,7 @@ public:
         printf("house numbers ................... %5d\n", housenumber_count);
         printf("named places .................... %5d\n", place_count);
         printf("various POIs .................... %5d\n", poi_count);
+        }
     }
 
 
