@@ -34,9 +34,12 @@ LIB_XML2   = $(shell xml2-config --libs)
 LDFLAGS = $(LIB_EXPAT) $(LIB_PBF)
 
 PROGRAMS = \
+    noderef \
     count_addresses \
     count \
     osmgrep \
+    grep-user-from-history \
+    history-cleartext \
     add_timestamp \
     osmstats \
     lastnode
@@ -48,10 +51,19 @@ all: $(PROGRAMS)
 count_addresses: count_addresses.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
+noderef: noderef.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
 count: count.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 osmgrep: osmgrep.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
+grep-user-from-history: grep-user-from-history.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
+
+history-cleartext: history-cleartext.cpp
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LIBXML2) -o $@ $< $(LDFLAGS) $(LIB_XML2)
 
 add_timestamp: add_timestamp.cpp
