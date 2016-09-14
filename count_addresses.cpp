@@ -36,13 +36,17 @@ private:
     size_t numbers_nodes_withstreet;  
     size_t numbers_nodes_withcity;
     size_t numbers_nodes_withcountry;
+    size_t numbers_nodes_withpostcode;
     size_t numbers_ways_overall;
     size_t numbers_ways_withstreet;  
     size_t numbers_ways_withcity;
     size_t numbers_ways_withcountry;
+    size_t numbers_ways_withpostcode;
+    size_t postcode_boundaries;
     size_t interpolation_count;
     size_t interpolation_error;
     size_t numbers_through_interpolation;
+    std::map<std::string, bool> postcode;
     bool debug;
 
 
@@ -54,10 +58,13 @@ public:
          numbers_nodes_withstreet = 0;  
          numbers_nodes_withcity = 0;
          numbers_nodes_withcountry = 0;
+         numbers_nodes_withpostcode = 0;
          numbers_ways_overall = 0;
          numbers_ways_withstreet = 0;  
          numbers_ways_withcity = 0;
          numbers_ways_withcountry = 0;
+         numbers_ways_withpostcode = 0;
+         postcode_boundaries = 0;
          interpolation_count = 0;
          interpolation_error = 0;
          numbers_through_interpolation = 0;
@@ -78,6 +85,11 @@ public:
             if (node->tags().get_value_by_key("addr:street")) numbers_nodes_withstreet ++;
             if (node->tags().get_value_by_key("addr:city")) numbers_nodes_withcity ++;
             if (node->tags().get_value_by_key("addr:country")) numbers_nodes_withcountry ++;
+            if (node->tags().get_value_by_key("addr:postcode")) 
+            {
+                numbers_nodes_withpostcode ++;
+                postcode[node->tags().get_value_by_key("addr:postcode")] = true;
+            }
         }
     }
 
@@ -162,7 +174,33 @@ public:
                 if (way->tags().get_value_by_key("addr:street")) numbers_ways_withstreet ++;
                 if (way->tags().get_value_by_key("addr:city")) numbers_ways_withcity ++;
                 if (way->tags().get_value_by_key("addr:country")) numbers_ways_withcountry ++;
+                if (way->tags().get_value_by_key("addr:postcode")) 
+                {
+                    numbers_ways_withpostcode ++;
+                    postcode[way->tags().get_value_by_key("addr:postcode")] = true;
+                }
             }
+            else
+            {
+                const char *bdy = way->tags().get_value_by_key("boundary");
+                if (bdy && !strcmp(bdy, "postal_code")) 
+                {
+                    postcode_boundaries++;
+                    const char *ref = way->tags().get_value_by_key("ref");
+                    if (ref) postcode[ref]=true;
+                }
+            }
+        }
+    }
+
+    void relation(const shared_ptr<Osmium::OSM::Relation>& rel) 
+    {
+        const char *bdy = rel->tags().get_value_by_key("boundary");
+        if (bdy && !strcmp(bdy, "postal_code")) 
+        {
+            postcode_boundaries++;
+            const char *ref = rel->tags().get_value_by_key("ref");
+            if (ref) postcode[ref]=true;
         }
     }
 
@@ -172,10 +210,13 @@ public:
         printf("with house number   %8ld   %8ld   %8ld\n", numbers_nodes_overall, numbers_ways_overall, numbers_nodes_overall + numbers_ways_overall);
         printf("... and street      %8ld   %8ld   %8ld\n", numbers_nodes_withstreet, numbers_ways_withstreet, numbers_nodes_withstreet + numbers_ways_withstreet);
         printf("... and city        %8ld   %8ld   %8ld\n", numbers_nodes_withcity, numbers_ways_withcity, numbers_nodes_withcity + numbers_ways_withcity);
+        printf("... and post code   %8ld   %8ld   %8ld\n", numbers_nodes_withpostcode, numbers_ways_withpostcode, numbers_nodes_withpostcode + numbers_ways_withpostcode);
         printf("... and country     %8ld   %8ld   %8ld\n", numbers_nodes_withcountry, numbers_ways_withcountry, numbers_nodes_withcountry + numbers_ways_withcountry);
         printf("\ntotal interpolations: %ld (%ld ignored)\n", interpolation_count, interpolation_error);
         printf("\nhouse numbers added through interpolation: %ld\n", numbers_through_interpolation);
         printf("\ngrand total (interpolation, ways, nodes): %ld\n", numbers_through_interpolation + numbers_nodes_overall + numbers_ways_overall);
+        printf("\nnumber of different post codes: %ld\n", postcode.size());
+        printf("\nnumber of post code boundaries: %ld\n", postcode_boundaries);
 
         throw Osmium::Handler::StopReading();
     }
