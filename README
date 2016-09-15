@@ -1,9 +1,0 @@
-A collection of Osmium-based utilities for doing things
-with OSM data files. 
-
-Note:
-
-These tools are based on the old version of Osmium, not the new one found in the osmcode/libosmium repo.
-The osmcode/osmtool repo has a command line utility that can be used to replace some of these programs:
-
-* As a lastnode.cpp replacement, use `osmium fileinfo x.osm.pbf -eg data.maxid.nodes
