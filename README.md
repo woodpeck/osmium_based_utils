@@ -27,3 +27,4 @@ The osmcode/osmtool repo has a command line utility that can be used to replace 
 ### Dropped
 
 * noderef.cpp
+* add_timestamp.cpp
