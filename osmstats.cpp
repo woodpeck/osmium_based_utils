@@ -4,6 +4,7 @@ Osmium-based program that displays a couple statistics about the
 date in the input file.
 
 Frederik Ramm <frederik@remote.org>, public domain
+Ported 2016 to libosmium 2.9 by Philip Beelmann <beelmann@geofabik.de>
 
 Handling of areas is still missing.
 
@@ -14,140 +15,61 @@ Handling of areas is still missing.
 #define OSMIUM_WITH_PBF_INPUT
 #define OSMIUM_WITH_XML_INPUT
 
-#include <osmium.hpp>
-#include <osmium/storage/byid/sparse_table.hpp>
-#include <osmium/storage/byid/mmap_file.hpp>
-#include <osmium/handler/coordinates_for_ways.hpp>
-#include <osmium/multipolygon/assembler.hpp>
-#include <osmium/geometry/multipolygon.hpp>
+#include <osmium/area/assembler.hpp>
+#include <osmium/area/multipolygon_collector.hpp>
+#include <osmium/dynamic_handler.hpp>
+
+#include <osmium/handler.hpp>
+#include <osmium/handler/node_locations_for_ways.hpp>
+#include <osmium/index/map/dummy.hpp>
+#include <osmium/index/map/sparse_mem_array.hpp>
+#include <osmium/io/any_input.hpp>
+#include <osmium/geom/haversine.hpp>
+#include <osmium/visitor.hpp>
+
+#include <geos/geom/Geometry.h>
+#include <geos/geom/LineString.h>
 
 /* ================================================== */
 
-class StatisticsHandler : public Osmium::Handler::Base 
+class StatisticsHandler : public osmium::handler::Handler
 {
 
 private:
 
-    double motorway_trunk_length;
-    double primary_secondary_length;
-    double other_road_length;
-    double residential_road_with_name_length;
-    double residential_road_length;
-    double path_length;
+    double motorway_trunk_length = 0;
+    double primary_secondary_length = 0;
+    double other_road_length = 0;
+    double residential_road_with_name_length = 0;
+    double residential_road_length = 0;
+    double path_length = 0;
 
-    double river_length;
-    double railway_length;
-    double powerline_length;
-    double water_area;
-    double forest_area;
+    double river_length = 0;
+    double railway_length = 0;
+    double powerline_length = 0;
+    double water_area = 0;
+    double forest_area = 0;
 
-    int building_count;
-    int poi_count;
-    int housenumber_count;
-    int place_count;
+    int building_count = 0;
+    int housenumber_count = 0;
+    int place_count = 0;
 
-    int poi_power_count;
-    int poi_traffic_count;
-    int poi_other_count;
-    int poi_public_count;
-    int poi_hospitality_count;
-    int poi_shop_count;
-    int poi_religion_count;
+    int poi_power_count = 0;
+    int poi_traffic_count = 0;
+    int poi_other_count = 0;
+    int poi_public_count = 0;
+    int poi_hospitality_count = 0;
+    int poi_shop_count = 0;
+    int poi_religion_count = 0;
 
-    int landuse_green_count;
-    int landuse_blue_count;
-    int landuse_zone_count;
-    int landuse_agri_count;
-
+    int landuse_green_count = 0;
+    int landuse_blue_count = 0;
+    int landuse_zone_count = 0;
+    int landuse_agri_count = 0;
 
 public:
 
-    StatisticsHandler() : Osmium::Handler::Base() 
-    {
-        motorway_trunk_length = 0;
-        primary_secondary_length = 0;
-        other_road_length = 0;
-        residential_road_length = 0;
-        residential_road_with_name_length = 0;
-        path_length = 0;
-
-        river_length = 0;
-        railway_length = 0;
-        powerline_length = 0;
-        water_area = 0;
-        forest_area = 0;
-
-        building_count = 0;
-        poi_count = 0;
-        housenumber_count = 0;
-        place_count = 0;
-
-        poi_power_count = 0;
-        poi_traffic_count = 0;
-        poi_other_count = 0;
-        poi_public_count = 0;
-        poi_hospitality_count = 0;
-        poi_shop_count = 0;
-        poi_religion_count = 0;
-        poi_traffic_count = 0;
-
-        landuse_green_count = 0;
-        landuse_blue_count = 0;
-        landuse_zone_count = 0;
-        landuse_agri_count = 0;
-    }
-
-    ~StatisticsHandler() {
-    }
-
-#define PI 3.14159265358979323846
-#define rad(DEG) ((DEG)*((PI)/(180.0)))
-    double lsarea(const geos::geom::LineString *ls)
-    {
-        const geos::geom::CoordinateSequence *cs = ls->getCoordinatesRO();
-        double area = 0;
-        size_t len = cs->getSize();
-        if (len < 3) return 0;
-        for (size_t i = 0; i < len-1; i++)
-        {
-            const geos::geom::Coordinate &p1 = cs->getAt(i);
-            const geos::geom::Coordinate &p2 = cs->getAt(i+1);
-            area += rad(p2.x - p1.x) *
-                        (2 + sin(rad(p1.y)) +
-                        sin(rad(p2.y)));
-        }
-        area = area * 6378137.0 * 6378137.0 / 2.0;
-    }
-
-    // unused, not properly working
-    double comparea(const shared_ptr<Osmium::OSM::Area const>& area) 
-    {
-        double sum;
-        const geos::geom::Geometry *a = Osmium::Geometry::MultiPolygon(*area).borrow_geos_geometry();
-        if (a)
-        {
-            for (size_t i = 0; i < a->getNumGeometries(); i++)
-            {
-                const geos::geom::Polygon *p = dynamic_cast<const geos::geom::Polygon *>(a->getGeometryN(i));
-                if (p)
-                {
-                    const geos::geom::LineString *er = p->getExteriorRing();
-                    sum += lsarea(er);
-                    for (size_t j = 0; j < p->getNumInteriorRing(); j++)
-                    {
-                        sum -= lsarea(p->getInteriorRingN(j));
-                    }
-                }
-            }
-        }
-        else
-        {
-            std::cout << "none" << std::endl;
-        }
-        return 0.0;
-    }
-
-    void count_misc(Osmium::OSM::TagList tags)
+    void count_misc(const osmium::TagList& tags)
     {
         const char *t = tags.get_value_by_key("landuse");
         if (t)
@@ -257,22 +179,22 @@ public:
     }
 
 
-    void area(const shared_ptr<Osmium::OSM::Area const>& area) 
+    void area(const osmium::Area& area)
     {
-        if (area->tags().get_value_by_key("building"))
+        if (area.tags().get_value_by_key("building"))
         {
             building_count++;
         }
-        if (area->tags().get_value_by_key("addr_housenumber"))
+        if (area.tags().get_value_by_key("addr_housenumber"))
         {
             housenumber_count++;
         }
-        count_misc(area->tags());
+        count_misc(area.tags());
     }
 
-    void way(const shared_ptr<Osmium::OSM::Way const>& way) 
+    void way(const osmium::Way& way)
     {
-        const char *hwy = way->tags().get_value_by_key("highway");
+        const char *hwy = way.tags().get_value_by_key("highway");
         if (hwy)
         {
             if (!strcmp(hwy, "motorway") || !strcmp(hwy, "trunk"))
@@ -291,7 +213,7 @@ public:
             {
                 double l = waylen(way);
                 residential_road_length += l;
-                if (way->tags().get_value_by_key("name")) residential_road_with_name_length += l;
+                if (way.tags().get_value_by_key("name")) residential_road_with_name_length += l;
             }
             else if (!strcmp(hwy, "service") || !strcmp(hwy, "path") || !strcmp(hwy, "footway") || !strcmp(hwy, "cycleway") || !strcmp(hwy, "track"))
             {
@@ -299,7 +221,7 @@ public:
             }
             return; 
         }
-        const char *wwy = way->tags().get_value_by_key("waterway");
+        const char *wwy = way.tags().get_value_by_key("waterway");
         if (wwy)
         {
             if (!strcmp(wwy, "river"))
@@ -308,7 +230,7 @@ public:
             }
             return;
         }
-        const char *rwy = way->tags().get_value_by_key("railway");
+        const char *rwy = way.tags().get_value_by_key("railway");
         if (rwy)
         {
             if (!strcmp(rwy, "rail") || !strcmp(rwy, "light_rail"))
@@ -317,7 +239,7 @@ public:
             }
             return;
         }
-        const char *pwr = way->tags().get_value_by_key("power");
+        const char *pwr = way.tags().get_value_by_key("power");
         if (pwr)
         {
             if (!strcmp(pwr, "line") || !strcmp(pwr, "minor_line"))
@@ -326,28 +248,28 @@ public:
             }
             return;
         }
-        count_misc(way->tags());
+        count_misc(way.tags());
     }
 
-    void node(const shared_ptr<Osmium::OSM::Node const>& node) 
+    void node(const osmium::Node& node)
     {
-        if (node->tags().get_value_by_key("place"))
+        if (node.tags().get_value_by_key("place"))
         {
-            if (node->tags().get_value_by_key("name")) place_count++;
+            if (node.tags().get_value_by_key("name")) place_count++;
         }
-        else if (node->tags().get_value_by_key("addr:housenumber"))
+        else if (node.tags().get_value_by_key("addr:housenumber"))
         {
             housenumber_count++;
         }
         else 
         {
-            count_misc(node->tags());
+            count_misc(node.tags());
         }
     }
 
-    void final()
+    void print()
     {
-        bool csv = true;
+        bool csv = false;
         if (csv)
         {
             std::cout <<
@@ -355,6 +277,7 @@ public:
                 "primary and secondary roads km,"
                 "other connecting roads km,"
                 "residential roads km,"
+                "residential roads with names km,"
                 "tracks/paths km,"
                 "rivers km,"
                 "railways km,"
@@ -379,6 +302,7 @@ public:
                 (int) (primary_secondary_length / 1000) << "," <<
                 (int) (other_road_length / 1000) << "," <<
                 (int) (residential_road_length / 1000) << "," <<
+                (int) (residential_road_with_name_length / 1000) << "," <<
                 (int) (path_length / 1000) << "," <<
                 (int) (river_length / 1000) << "," <<
                 (int) (railway_length / 1000) << "," <<
@@ -396,66 +320,54 @@ public:
                 poi_hospitality_count << "," <<
                 poi_shop_count << "," <<
                 poi_religion_count << "," <<
-                poi_other_count << 
-                std::endl;
+                poi_other_count << std::endl;
         }
         else
         {
-        printf("motorways and trunk roads ....... %5.0f km\n", motorway_trunk_length / 1000);
-        printf("primary and secondary roads ..... %5.0f km\n", primary_secondary_length / 1000);
-        printf("other connecting roads .......... %5.0f km\n", other_road_length / 1000);
-        printf("residential roads ............... %5.0f km\n", residential_road_length / 1000);
-        printf("   thereof, with names .......... %5.0f%%\n",  residential_road_with_name_length * 100 / residential_road_length);
-        printf("tracks, service ways, paths ..... %5.0f km\n", path_length / 1000);
-        printf("rivers .......................... %5.0f km\n", river_length / 1000);
-        printf("railways ........................ %5.0f km\n", railway_length / 1000);
-        printf("power lines ..................... %5.0f km\n", powerline_length / 1000);
-        printf("\n");
-        printf("buildings ....................... %5d\n", building_count);
-        printf("house numbers ................... %5d\n", housenumber_count);
-        printf("named places .................... %5d\n", place_count);
-        printf("various POIs .................... %5d\n", poi_count);
+            std::cout << "motorways and trunk roads km........"  <<  (int) (motorway_trunk_length / 1000)             << std::endl;
+            std::cout << "primary and secondary roads km......"  <<  (int) (primary_secondary_length / 1000)          << std::endl;
+            std::cout << "other connecting roads km..........."  <<  (int) (other_road_length / 1000)                 << std::endl;
+            std::cout << "residential roads km................"  <<  (int) (residential_road_length / 1000)           << std::endl;
+            std::cout << "residential roads with names km....."  <<  (int) (residential_road_with_name_length / 1000) << std::endl;
+            std::cout << "tracks/paths km....................."  <<  (int) (path_length / 1000)                       << std::endl;
+            std::cout << "rivers km..........................."  <<  (int) (river_length / 1000)                      << std::endl;
+            std::cout << "railways km........................."  <<  (int) (railway_length / 1000)                    << std::endl;
+            std::cout << "power lines km......................"  <<  (int) (powerline_length / 1000)                  << std::endl;
+            std::cout << "buildings..........................."  <<  building_count                                   << std::endl;
+            std::cout << "house numbers......................."  <<  housenumber_count                                << std::endl;
+            std::cout << "named places........................"  <<  place_count                                      << std::endl;
+            std::cout << "forest/meadow landcover count......."  <<  landuse_green_count                              << std::endl;
+            std::cout << "water area landcover count.........."  <<  landuse_blue_count                               << std::endl;
+            std::cout << "residential/industrial zone count..."  <<  landuse_zone_count                               << std::endl;
+            std::cout << "agricultural landuse count.........."  <<  landuse_agri_count                               << std::endl;
+            std::cout << "POIs power.........................."  <<  poi_power_count                                  << std::endl;
+            std::cout << "POIs transport......................"  <<  poi_traffic_count                                << std::endl;
+            std::cout << "POIs public........................."  <<  poi_public_count                                 << std::endl;
+            std::cout << "POIs hospitality...................."  <<  poi_hospitality_count                            << std::endl;
+            std::cout << "POIs shop/bank......................"  <<  poi_shop_count                                   << std::endl;
+            std::cout << "POIs religion......................."  <<  poi_religion_count                               << std::endl;
+            std::cout << "POIs other.........................."  <<  poi_other_count                                  << std::endl;
         }
+
     }
 
 
 private:
 
-double waylen(const shared_ptr<Osmium::OSM::Way const>& way) 
+double waylen(const osmium::Way& way)
 {
-    return Osmium::Geometry::Haversine::distance(way->nodes());
+    return osmium::geom::haversine::distance(way.nodes());
 }
-double wayarea(const shared_ptr<Osmium::OSM::Area const>& area) 
-{
-    /*
-    double len = 0;
-    double lastlat = 0;
-    double lastlon = 0;
-    bool init = true;
-    for (Osmium::OSM::WayNodeList::const_iterator i = way->nodes().begin(); i!= way->nodes().end(); i++)
-    {
-        double thislon = i->lon();
-        double thislat = i->lat();
-        if (!init)
-        {
-            len += dist(lastlat, lastlon, thislat, thislon);
-        }
-        else
-        {
-            init = false;
-        }
-        lastlat = thislat;
-        lastlon = thislon;
-    }
-    */
-    return 0.0;
-}
+
 };
 
 /* ================================================== */
 
-typedef Osmium::Storage::ById::SparseTable<Osmium::OSM::Position> storage_sparsetable_t;
-typedef Osmium::Storage::ById::MmapFile<Osmium::OSM::Position> storage_mmap_t;
+// The type of index used. This must match the include file above
+using index_type = osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type, osmium::Location>;
+
+// The location handler always depends on the index type
+using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 
 int main(int argc, char* argv[]) 
 {
@@ -464,29 +376,54 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    Osmium::OSMFile infile(argv[1]);
-
-    storage_sparsetable_t store_pos;
-    storage_mmap_t store_neg;
-
     StatisticsHandler stat_handler;
 
-    typedef Osmium::MultiPolygon::Assembler<StatisticsHandler> assembler_t;
-    assembler_t assembler(stat_handler, false);
-    assembler.set_debug_level(1);
+    // Initialize an empty DynamicHandler. Later it will be associated
+    // with one of the handlers. You can think of the DynamicHandler as
+    // a kind of "variant handler" or a "pointer handler" pointing to the
+    // real handler.
+    osmium::handler::DynamicHandler handler;
 
-    typedef Osmium::Handler::CoordinatesForWays<storage_sparsetable_t, storage_mmap_t> cfw_handler_t;
-    cfw_handler_t cfw_handler(store_pos, store_neg);
+    osmium::io::File input_file{argv[optind]};
 
-    typedef Osmium::Handler::Sequence<cfw_handler_t, assembler_t::HandlerPass2> sequence_handler_t;
-    sequence_handler_t sequence_handler(cfw_handler, assembler.handler_pass2());
+    // Configuration for the multipolygon assembler. Here the default settings
+    // are used, but you could change multiple settings.
+    osmium::area::Assembler::config_type assembler_config;
 
-    std::cerr << "First pass...\n";
-    Osmium::Input::read(infile, assembler.handler_pass1());
+    // Initialize the MultipolygonCollector. Its job is to collect all
+    // relations and member ways needed for each area. It then calls an
+    // instance of the osmium::area::Assembler class (with the given config)
+    // to actually assemble one area.
+    osmium::area::MultipolygonCollector<osmium::area::Assembler> collector{assembler_config};
 
-    std::cerr << "Second pass...\n";
-    Osmium::Input::read(infile, sequence_handler);
+    // We read the input file twice. In the first pass, only relations are
+    // read and fed into the multipolygon collector.
+    osmium::io::Reader reader1{input_file, osmium::osm_entity_bits::relation};
+    collector.read_relations(reader1);
+    reader1.close();
 
-    google::protobuf::ShutdownProtobufLibrary();
+    // The index storing all node locations.
+    index_type index;
+
+    // The handler that stores all node locations in the index and adds them
+    // to the ways.
+    location_handler_type location_handler{index};
+
+    // If a location is not available in the index, we ignore it. It might
+    // not be needed (if it is not part of a multipolygon relation), so why
+    // create an error?
+    location_handler.ignore_errors();
+
+    // On the second pass we read all objects and run them first through the
+    // node location handler and then the multipolygon collector. The collector
+    // will put the areas it has created into the "buffer" which are then
+    // fed through our "handler".
+    osmium::io::Reader reader2{input_file};
+    osmium::apply(reader2, location_handler, stat_handler, collector.handler([&stat_handler](osmium::memory::Buffer&& buffer) {
+        osmium::apply(buffer, stat_handler);
+    }));
+    reader2.close();
+
+    stat_handler.print();
 }
 
